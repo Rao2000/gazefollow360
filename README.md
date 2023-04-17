@@ -36,7 +36,7 @@ Experimental results in paper:
 
 |              |  AUC  | sphere dist |
 | :----------: | :----: | :---------: |
-| test dataset | 0.9350 |   0.6067   |
+| test dataset | 0.8104 |   0.6067   |
 
 
 Our experimental results are as follows. At the same time, we provide the pretrained models.
