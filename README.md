@@ -39,11 +39,23 @@ Experimental results in paper:
 | test dataset | 0.8104 |   0.6067   |
 
 
-Our experimental results are as follows. At the same time, we provide the pretrained models.
+Our experimental results are shown below, which are close to the experimental results of the paper At the same time, we can provide our pretrained models.
+
 
 |              | pixel dist | norm dist | AUC    | sphere dist |
 | ------------ | ---------- | --------- | ------ | ----------- |
-| test dataset | 443.5346   | 0.1584    | 0.8673 | 0.6157      |
+| test dataset | 443.5346   | 0.1584    | 0.7803 | 0.6157      |
+
+We use the Area Under Curve (AUC) criterion to assess a predicted gaze target heatmap. For fair comparsion, all the predicted heatmap are upsample/downsample to a 64*64 heatmap and are compared a heatmap of the same size with kernel size 3 to calculate the AUC score.
+```
+@inproceedings{li2021looking,
+	  title={Looking here or there? gaze following in 360-degree images},
+	  author={Li, Yunhao and Shen, Wei and Gao, Zhongpai and Zhu, Yucheng and Zhai, Guangtao and Guo, Guodong},
+	  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+	  pages={3742--3751},
+	  year={2021}
+	}
+```
 
 # Other links
 
