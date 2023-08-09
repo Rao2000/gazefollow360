@@ -34,6 +34,10 @@ def func(PoG, imsize, output):
     gaze = PoG.numpy()
     shape = imsize.numpy().astype(np.int64)
     # AUC: area under curve of ROC
+    multi_hot = torch.zeros(output_resolution, output_resolution)
+    multi_hot = imutils.draw_labelmap(multi_hot, [gaze * output_resolution, gaze * output_resolution], 3, type='Gaussian')
+    multi_hot = (multi_hot > 0).float() * 1 # make GT heatmap as binary labels
+    multi_hot = misc.to_numpy(multi_hot)
     multi_hot = imutils.multi_hot_targets(gaze, shape)
     scaled_heatmap = np.array(Image.fromarray(output.cpu().numpy()).resize(shape.tolist()))
     auc_score = evaluation.auc(scaled_heatmap, multi_hot)
