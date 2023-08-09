@@ -16,43 +16,19 @@ import warnings
 from train_all import get_gt
 from tqdm import *
 from model import i2c
-import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+import pandas as pd
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
+logdir = "/home/data"
+if not os.path.exists(logdir):
+    os.makedirs(logdir)
+    
 parser = argparse.ArgumentParser()
 parser.add_argument("--device", type=int, default=0, help="gpu id")
 parser.add_argument("--model_weights", type=str, default="/home/data/tbw_gaze/gaze323/log_2023/all/all14/epoch_05_weights.pt", help="model weights")
 parser.add_argument("--batch_size", type=int, default=256, help="batch size")
 args = parser.parse_args()
-
-def func(PoG, imsize, output):
-
-    cos_loss1 = nn.CosineSimilarity(dim=1, eps=1e-6)
-
-    gaze = PoG.numpy()
-    shape = imsize.numpy().astype(np.int64)
-    # AUC: area under curve of ROC
-    multi_hot = torch.zeros(output_resolution, output_resolution)
-    multi_hot = imutils.draw_labelmap(multi_hot, [gaze * output_resolution, gaze * output_resolution], 3, type='Gaussian')
-    multi_hot = (multi_hot > 0).float() * 1 # make GT heatmap as binary labels
-    multi_hot = misc.to_numpy(multi_hot)
-    multi_hot = imutils.multi_hot_targets(gaze, shape)
-    scaled_heatmap = np.array(Image.fromarray(output.cpu().numpy()).resize(shape.tolist()))
-    auc_score = evaluation.auc(scaled_heatmap, multi_hot)
-    
-    # px distance
-    pred_x, pred_y = evaluation.argmax_pts(output.cpu().numpy())
-    norm_p = [pred_x / 56, pred_y / 56]
-
-    norm_p_cemara = torch.tensor(i2c(np.array([norm_p])))
-    gaze_cemara = torch.tensor(i2c(np.array([gaze])))
-    sphere_distance = torch.arccos(cos_loss1(gaze_cemara, norm_p_cemara))
-    
-    distances = evaluation.L2_dist(gaze, norm_p, shape)
-    norm_distance = evaluation.L2_dist(gaze, norm_p, [1, 1])
-    return [auc_score, distances, norm_distance, sphere_distance]
 
 def test():
     # Prepare data
@@ -69,6 +45,9 @@ def test():
     # Load model
     print("Constructing model")
 
+    # Define pd data
+    pd_data = []
+
     model = gazefollow360()
     model.cuda()
     model_dict = model.state_dict()
@@ -81,39 +60,33 @@ def test():
     model.eval()
     AUC = []; pixel_dist = []; norm_dist = []; sphere_dist = []
     with torch.no_grad():
-        with torch.no_grad():
-            for test_idx, (test_face, test_head_position_zp, test_gaze_ds, img_imf, PoG) in tqdm(enumerate(test_loader)):
+        gaze_heatmap_pred_list = []
+        for test_idx, (test_face, test_head_position_zp, test_gaze_ds, img_imf, PoG) in tqdm(enumerate(test_loader)):
 
-                test_face = test_face.cuda().to(device)
-                test_head_position_zp = test_head_position_zp.cuda().to(device)
-                output = model(test_face, test_head_position_zp, img_imf)
-
-                output = output.reshape(-1, 56, 56)
-
-                imsize = img_imf["size"]
-
-                def Callback(data):
-                    AUC.append(data[0])
-                    pixel_dist.append(data[1])
-                    norm_dist.append(data[2])
-                    sphere_dist.append(data[3])
-    
-                def err_call_back(err):
-                    print(f'3出错啦~ error：{str(err)}')
-
-                ctx = torch.multiprocessing.get_context("spawn")
-                pool = ctx.Pool(16)
-                # for b_i in range(PoG.shape[0]):
-                for PoG, imsize, output in zip(PoG, imsize, output.cpu()):
-                    pool.apply_async(func, (PoG, imsize, output), callback=Callback, error_callback=err_call_back)
-                pool.close()
-                pool.join()
-
-        print("\tAUC:{:.4f}\tpixel dist:{:.4f}\tnorm dist:{:.4f}\tsphere dist:{:.4f}".format(
-              torch.mean(torch.tensor(AUC)),
-              torch.mean(torch.tensor(pixel_dist)),
-              torch.mean(torch.tensor(norm_dist)),
-              torch.mean(torch.tensor(sphere_dist))))
+            test_face = test_face.cuda().to(device)
+            test_head_position_zp = test_head_position_zp.cuda().to(device)
+            val_gaze_heatmap_pred = model(test_face, test_head_position_zp, img_imf)
+            
+            val_gaze_heatmap_pred = val_gaze_heatmap_pred.reshape(-1, 56, 56)
+            val_gaze_heatmap_pred = val_gaze_heatmap_pred.cpu().numpy()
+            gaze_heatmap_pred_list.append(val_gaze_heatmap_pred)
+            
+            imsize = img_imf["size"]
+            path = img_imf["scene_path"]
+            for b_i in range(PoG.shape[0]):
+                gaze = PoG[b_i].numpy().tolist()
+                scene_path = path[b_i]
+                shape = imsize[b_i].numpy()
+                pred_x, pred_y = evaluation.argmax_pts(val_gaze_heatmap_pred[b_i])
+                norm_p = [pred_x/float(val_gaze_heatmap_pred[b_i].shape[0]), pred_y/float(val_gaze_heatmap_pred[b_i].shape[1])]
+                data = {"picname": scene_path, "predicted_gaze_x": norm_p[0], "predicted_gaze_y": norm_p[1], 
+                        "gaze_label_x": gaze[0], "gaze_label_y": gaze[1],
+                        "imsize_x": shape[0], "imsize_y": shape[1]}
+                pd_data.append(data)
+    pd_data = pd.DataFrame(pd_data)
+    pd_data.to_csv(os.path.join(logdir, "predicts.csv"), sep='\t')
+    gaze_heatmap_pred = np.concatenate(gaze_heatmap_pred_list, axis=0)
+    np.save(os.path.join(logdir, "predict_heatmaps.npy"), gaze_heatmap_pred)    
 
 if __name__ == "__main__":
     test()
