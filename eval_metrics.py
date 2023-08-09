@@ -4,6 +4,10 @@ import pandas as pd
 from PIL import Image
 import os
 from tqdm import tqdm
+from utils import imutils, evaluation, misc
+import cv2
+import torch
+
 
 def I2C(point_i):
     # 输入I坐标系下，输出C坐标系下
