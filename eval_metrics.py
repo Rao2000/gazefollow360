@@ -97,23 +97,21 @@ def eval_metrics(information_path, pred_heatmap_path):
 
     auc_list = []
     for idx in tqdm(range(0, pred_heatmap.shape[0])):
-        # 只能输入单通道热图
-        # auc_list.append(auc(pred_heatmap[idx][0], gt_x[idx], gt_y[idx], imsize_x[idx], imsize_y[idx]))
-        auc_list.append(auc(pred_heatmap[idx], gt_x[idx], gt_y[idx], int(imsize_x[idx]), int(imsize_y[idx])))
+        multi_hot = torch.zeros(output_resolution, output_resolution)
+        multi_hot = imutils.draw_labelmap(multi_hot, [gt_x[idx] * output_resolution, gt_y[idx] * output_resolution], 3, type='Gaussian')
+        multi_hot = (multi_hot > 0).float() * 1 # make GT heatmap as binary labels
+        multi_hot = misc.to_numpy(multi_hot)
+        
+        pm = pred_heatmap[idx]
+        scaled_heatmap = cv2.resize(pm, (output_resolution, output_resolution))
+        auc_score = evaluation.auc(scaled_heatmap, multi_hot)
+        auc_list.append(auc_score)        
     auc_score = np.mean(np.array(auc_list))
-    # auc_score = 0
     print("exp: {}\tnorm dist: {}\tpixel dist: {}\tsphere dist: {}\tauc: {}".format(information_path.split('/')[-2], norm_dist, pixel_dist, sphere_dist, auc_score))
 
 if __name__ == "__main__":
-    # results_root_dir = '/home/data/tbw_gaze/gaze323/gaze323-gaze-GazeFollowing-/result'
-    # sub_dirs = os.listdir(results_root_dir)
-    # for sub_dir in sub_dirs:
-    #     result_root = os.path.join(results_root_dir, sub_dir)
-    #     information_path = os.path.join(result_root, 'predicts.csv')
-    #     pred_heatmap_path = os.path.join(result_root, 'predict_heatmaps.npz')
-    #     eval_metrics(information_path, pred_heatmap_path)
 
-    results_root_dir = '/home/data/tbw_gaze/gaze323/gaze323-gaze-gazefollow360-/result/gazefollow360'
+    results_root_dir = '/home/data/gazefollow360'
     information_path = os.path.join(results_root_dir, 'predicts.csv')
     pred_heatmap_path = os.path.join(results_root_dir, 'predict_heatmaps.npy')
     eval_metrics(information_path, pred_heatmap_path)
